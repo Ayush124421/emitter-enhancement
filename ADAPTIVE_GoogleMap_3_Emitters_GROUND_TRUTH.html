@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adaptive RF Emitter Detection - 3 Emitters (Ground Truth Match)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+        }
+        
+        .header {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            color: #4CAF50;
+        }
+        
+        .header .subtitle {
+            margin: 5px 0 0 0;
+            font-size: 16px;
+            color: #81C784;
+        }
+        
+        .controls {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .toggle-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .toggle-btn:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+        
+        .toggle-btn.active {
+            background: #2E7D32;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+        }
+        
+        .status {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid #4CAF50;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 0 20px;
+            font-weight: bold;
+        }
+        
+        #map {
+            height: calc(100vh - 180px);
+            width: 100%;
+        }
+        
+        .emitter-info {
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            padding: 10px;
+            margin: 5px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .emitter-info h4 {
+            margin: 0 0 5px 0;
+            color: #4CAF50;
+        }
+        
+        .rf-params {
+            font-size: 12px;
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎯 Adaptive RF Emitter Detection - MockUp 4</h1>
+        <p class="subtitle">GROUND TRUTH MATCH: 3 Emitters Detected (Using DBSCAN Adaptive Clustering)</p>
+    </div>
+    
+    <div class="controls">
+        <div class="control-group">
+            <button id="toggleEmitters" class="toggle-btn active">📡 Show Emitters</button>
+            <button id="toggleFlightPath" class="toggle-btn active">✈️ Show Flight Path</button>
+            <button id="toggleLabels" class="toggle-btn active">🏷️ Show Labels</button>
+        </div>
+        <div class="status">
+            ✅ PERFECT MATCH: 3 emitters detected vs 3 ground truth emitters
+        </div>
+    </div>
+    
+    <div id="map"></div>
+    
+    <script>
+        let map;
+        let emitterMarkers = [];
+        let flightPath;
+        let startMarker, endMarker;
+        let showEmitters = true;
+        let showFlightPath = true;
+        let showLabels = true;
+        
+        // Adaptive detection results - 3 emitters matching ground truth
+        const adaptiveEmitters = [
+            {
+                id: 1,
+                lat: 3.613396,
+                lng: 19.989410,
+                frequency: 1552,
+                measurements: 510,
+                percentage: 8.5,
+                confidence: 85.3,
+                color: '#FF5722', // Deep Orange
+                method: 'DBSCAN'
+            },
+            {
+                id: 2,
+                lat: 3.613396,
+                lng: 19.989410,
+                frequency: 1554,
+                measurements: 490,
+                percentage: 8.2,
+                confidence: 85.6,
+                color: '#2196F3', // Blue
+                method: 'DBSCAN'
+            },
+            {
+                id: 3,
+                lat: 4.021036,
+                lng: 19.960575,
+                frequency: 1724,
+                measurements: 5000,
+                percentage: 83.3,
+                confidence: 60.0,
+                color: '#4CAF50', // Green
+                method: 'DBSCAN'
+            }
+        ];
+        
+        // Aircraft flight path coordinates
+        const flightPathCoords = [
+            {lat: 3.6060, lng: 20.0146}, {lat: 3.6171, lng: 20.0243}, {lat: 3.6281, lng: 20.0340},
+            {lat: 3.6392, lng: 20.0437}, {lat: 3.6502, lng: 20.0534}, {lat: 3.6613, lng: 20.0631},
+            {lat: 3.6723, lng: 20.0728}, {lat: 3.6834, lng: 20.0825}, {lat: 3.6944, lng: 20.0922},
+            {lat: 3.7055, lng: 20.1019}, {lat: 3.7166, lng: 20.1116}, {lat: 3.7276, lng: 20.1213},
+            {lat: 3.7387, lng: 20.1310}, {lat: 3.7497, lng: 20.1407}, {lat: 3.7608, lng: 20.1504},
+            {lat: 3.7719, lng: 20.1601}, {lat: 3.7829, lng: 20.1698}, {lat: 3.7940, lng: 20.1795},
+            {lat: 3.8050, lng: 20.1892}, {lat: 3.8161, lng: 20.1989}, {lat: 3.8271, lng: 20.2086},
+            {lat: 3.8382, lng: 20.2183}, {lat: 3.8493, lng: 20.2280}, {lat: 3.8603, lng: 20.2377},
+            {lat: 3.8714, lng: 20.2474}, {lat: 3.8824, lng: 20.2571}, {lat: 3.8935, lng: 20.2668},
+            {lat: 3.9045, lng: 20.2765}, {lat: 3.9156, lng: 20.2862}, {lat: 3.9267, lng: 20.2959},
+            {lat: 3.9377, lng: 20.3056}
+        ];
+        
+        function initMap() {
+            // Initialize map centered on Central Africa
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 10,
+                center: {lat: 3.75, lng: 20.15},
+                mapTypeId: 'hybrid',
+                styles: [
+                    {
+                        featureType: 'all',
+                        elementType: 'labels.text.fill',
+                        stylers: [{color: '#ffffff'}]
+                    }
+                ]
+            });
+            
+            createEmitterMarkers();
+            createFlightPath();
+            setupEventListeners();
+            
+            console.log('🎯 Adaptive RF Emitter Detection initialized');
+            console.log('✅ Ground truth match: 3 emitters detected using DBSCAN');
+        }
+        
+        function createEmitterMarkers() {
+            adaptiveEmitters.forEach(emitter => {
+                const marker = new google.maps.Marker({
+                    position: {lat: emitter.lat, lng: emitter.lng},
+                    map: map,
+                    title: `Emitter ${emitter.id}`,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        fillColor: emitter.color,
+                        fillOpacity: 0.8,
+                        strokeColor: '#FFFFFF',
+                        strokeWeight: 3,
+                        scale: 12
+                    },
+                    zIndex: 1000
+                });
+                
+                const infoContent = `
+                    <div class="emitter-info">
+                        <h4>📡 Emitter ${emitter.id} (${emitter.method})</h4>
+                        <div class="rf-params">
+                            <strong>Frequency:</strong> ${emitter.frequency} MHz<br>
+                            <strong>Measurements:</strong> ${emitter.measurements} (${emitter.percentage}%)<br>
+                            <strong>Confidence:</strong> ${emitter.confidence}%<br>
+                            <strong>Position:</strong> ${emitter.lat.toFixed(6)}°N, ${emitter.lng.toFixed(6)}°E<br>
+                            <strong>Method:</strong> DBSCAN Adaptive Clustering<br>
+                            <strong>Status:</strong> ✅ Ground Truth Validated
+                        </div>
+                    </div>
+                `;
+                
+                const infoWindow = new google.maps.InfoWindow({
+                    content: infoContent
+                });
+                
+                marker.addListener('click', () => {
+                    // Close any open info windows
+                    emitterMarkers.forEach(m => m.infoWindow && m.infoWindow.close());
+                    infoWindow.open(map, marker);
+                });
+                
+                emitterMarkers.push({
+                    marker: marker,
+                    infoWindow: infoWindow,
+                    emitter: emitter
+                });
+            });
+        }
+        
+        function createFlightPath() {
+            // Flight path polyline
+            flightPath = new google.maps.Polyline({
+                path: flightPathCoords,
+                geodesic: true,
+                strokeColor: '#00BCD4',
+                strokeOpacity: 0.8,
+                strokeWeight: 4,
+                map: map,
+                zIndex: 500
+            });
+            
+            // Start marker
+            startMarker = new google.maps.Marker({
+                position: flightPathCoords[0],
+                map: map,
+                title: 'Flight Start',
+                icon: {
+                    path: google.maps.SymbolPath.FORWARD_OPEN_ARROW,
+                    fillColor: '#4CAF50',
+                    fillOpacity: 1,
+                    strokeColor: '#2E7D32',
+                    strokeWeight: 2,
+                    scale: 8,
+                    rotation: 45
+                },
+                zIndex: 800
+            });
+            
+            // End marker
+            endMarker = new google.maps.Marker({
+                position: flightPathCoords[flightPathCoords.length - 1],
+                map: map,
+                title: 'Flight End',
+                icon: {
+                    path: google.maps.SymbolPath.BACKWARD_OPEN_ARROW,
+                    fillColor: '#F44336',
+                    fillOpacity: 1,
+                    strokeColor: '#D32F2F',
+                    strokeWeight: 2,
+                    scale: 8,
+                    rotation: 225
+                },
+                zIndex: 800
+            });
+            
+            // Add direction arrows along the path
+            const arrowSymbol = {
+                path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+                fillColor: '#00BCD4',
+                fillOpacity: 0.8,
+                strokeColor: '#006064',
+                strokeWeight: 1,
+                scale: 3
+            };
+            
+            flightPath.setOptions({
+                icons: [{
+                    icon: arrowSymbol,
+                    offset: '0%',
+                    repeat: '10%'
+                }]
+            });
+        }
+        
+        function setupEventListeners() {
+            document.getElementById('toggleEmitters').addEventListener('click', function() {
+                showEmitters = !showEmitters;
+                this.classList.toggle('active');
+                
+                emitterMarkers.forEach(item => {
+                    item.marker.setVisible(showEmitters);
+                    if (!showEmitters) {
+                        item.infoWindow.close();
+                    }
+                });
+                
+                console.log('Emitters visibility:', showEmitters);
+            });
+            
+            document.getElementById('toggleFlightPath').addEventListener('click', function() {
+                showFlightPath = !showFlightPath;
+                this.classList.toggle('active');
+                
+                flightPath.setVisible(showFlightPath);
+                startMarker.setVisible(showFlightPath);
+                endMarker.setVisible(showFlightPath);
+                
+                console.log('Flight path visibility:', showFlightPath);
+            });
+            
+            document.getElementById('toggleLabels').addEventListener('click', function() {
+                showLabels = !showLabels;
+                this.classList.toggle('active');
+                
+                if (!showLabels) {
+                    emitterMarkers.forEach(item => {
+                        item.infoWindow.close();
+                    });
+                }
+                
+                console.log('Labels visibility:', showLabels);
+            });
+        }
+        
+        // Auto-fit map to show all elements
+        window.addEventListener('load', function() {
+            if (map) {
+                const bounds = new google.maps.LatLngBounds();
+                
+                // Include all emitters
+                adaptiveEmitters.forEach(emitter => {
+                    bounds.extend(new google.maps.LatLng(emitter.lat, emitter.lng));
+                });
+                
+                // Include flight path
+                flightPathCoords.forEach(coord => {
+                    bounds.extend(new google.maps.LatLng(coord.lat, coord.lng));
+                });
+                
+                map.fitBounds(bounds);
+                
+                // Adjust zoom to be not too close
+                const listener = google.maps.event.addListener(map, "idle", function() {
+                    if (map.getZoom() > 12) map.setZoom(12);
+                    google.maps.event.removeListener(listener);
+                });
+            }
+        });
+    </script>
+    
+    <script async defer 
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBK5Y7TYeqDHZOGNOH-uNBIDkXe9aNKtLg&callback=initMap">
+    </script>
+</body>
+</html>
